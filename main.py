@@ -12,10 +12,8 @@ logging.basicConfig(level=logging.INFO)
 
 # ----------------------------------------------------
 # 設定 Google Sheets 參數
-# 請確保您的服務帳號有此試算表的「編輯者」權限
-# 這裡使用您提供的 ID: 1IHyA7aRxGJekm31KIbuORpg4-dVY8XTOEbU6p8vK3y4
 spreadsheet_id = "1IHyA7aRxGJekm31KIbuORpg4-dVY8XTOEbU6p8vK3y4"
-WORKSHEET_NAME = "設備報修" # 請檢查此名稱是否與您的 Google Sheets 工作表名稱完全匹配
+WORKSHEET_NAME = "設備報修" 
 
 # Google Sheets API 範圍
 scope = [
@@ -65,7 +63,6 @@ CORS(app)
 
 # 在應用程式第一次請求前先初始化 gspread
 with app.app_context():
-    # 確保應用程式啟動時就嘗試連線
     initialize_gspread()
 
 # ----------------------------------------------------
@@ -389,12 +386,13 @@ def student_tasks_page():
             }}
 
             const card = document.createElement('div');
-            card.className = `task-card bg-white p-6 rounded-xl shadow-lg border-l-4 border-indigo-500 \${isCompleted ? 'opacity-70' : ''}`;
+            // *** 修正後的代碼 ***
+            card.className = `task-card bg-white p-6 rounded-xl shadow-lg border-l-4 border-indigo-500 ${{isCompleted ? 'opacity-70' : ''}}`;
             
             card.innerHTML = `
                 <div class="flex justify-between items-start mb-4">
                     <div>
-                        <span class="px-3 py-1 text-sm font-semibold rounded-full \${statusClass}">${escape(task.status)}</span>
+                        <span class="px-3 py-1 text-sm font-semibold rounded-full $ {{statusClass}}">${escape(task.status)}</span>
                     </div>
                     <span class="text-sm text-gray-500">${escape(task.timestamp)}</span>
                 </div>
@@ -410,8 +408,8 @@ def student_tasks_page():
                     <button 
                         data-row-index="${task.rowIndex}" 
                         data-current-status="${task.status}"
-                        class="status-button w-full py-2 px-4 rounded-lg text-white font-medium shadow-md transition duration-150 ease-in-out \${isCompleted ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'}"
-                        \${isCompleted ? 'disabled' : ''}
+                        class="status-button w-full py-2 px-4 rounded-lg text-white font-medium shadow-md transition duration-150 ease-in-out $ {{isCompleted ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'}}"
+                        $ {{isCompleted ? 'disabled' : ''}}
                     >
                         ${buttonText}
                     </button>
@@ -588,5 +586,4 @@ def update_status_api():
 # ----------------------------------------------------
 # 本地測試運行
 if __name__ == '__main__':
-    # 注意：在 Render 上運行時，請使用 uvicorn (如 render.yaml)
     app.run(debug=True, host='0.0.0.0', port=os.environ.get('PORT', 5000))
