@@ -1,0 +1,5 @@
+Flask
+Flask-CORS
+gspread
+oauth2client
+uvicorn
