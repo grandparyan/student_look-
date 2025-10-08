@@ -12,8 +12,10 @@ logging.basicConfig(level=logging.INFO)
 
 # ----------------------------------------------------
 # 設定 Google Sheets 參數
+# 請確保您的服務帳號有此試算表的「編輯者」權限
+# 這裡使用您提供的 ID: 1IHyA7aRxGJekm31KIbuORpg4-dVY8XTOEbU6p8vK3y4
 spreadsheet_id = "1IHyA7aRxGJekm31KIbuORpg4-dVY8XTOEbU6p8vK3y4"
-WORKSHEET_NAME = "設備報修" # 請再次檢查此名稱是否與您的 Google Sheets 工作表名稱完全匹配
+WORKSHEET_NAME = "設備報修" # 請檢查此名稱是否與您的 Google Sheets 工作表名稱完全匹配
 
 # Google Sheets API 範圍
 scope = [
@@ -29,7 +31,6 @@ def initialize_gspread():
     """初始化 Google Sheets 連線。"""
     global client, sheet
     
-    # 避免重複初始化
     if client:
         return True 
 
@@ -52,14 +53,8 @@ def initialize_gspread():
         logging.info(f"成功連線到 Google Sheets。工作表名稱: {WORKSHEET_NAME}")
         return True
 
-    except gspread.exceptions.WorksheetNotFound:
-        logging.error(f"嚴重錯誤：找不到名稱為「{WORKSHEET_NAME}」的工作表。請檢查名稱或試算表 ID。")
-        return False
-    except gspread.exceptions.SpreadsheetNotFound:
-        logging.error(f"嚴重錯誤：找不到試算表ID為「{spreadsheet_id}」的試算表。請檢查 ID 或服務帳號權限。")
-        return False
     except Exception as e:
-        logging.error(f"連線到 Google Sheets 時發生未知錯誤: {e}")
+        logging.error(f"連線到 Google Sheets 或打開工作表時發生錯誤: {e}")
         return False
 
 # ----------------------------------------------------
@@ -76,12 +71,13 @@ with app.app_context():
 # ----------------------------------------------------
 # 路由定義
 
-# 1. 根路由：用於顯示 HTML 報修表單 (使用您提供的 repair_form.html 內容)
+# 1. 根路由：用於顯示 HTML 報修表單 (您的 index.html 內容)
 @app.route('/')
 def home():
     """
-    回傳完整的 HTML 報修表單內容，作為服務的前端。
+    回傳報修表單的 HTML 內容。
     """
+    # HTML 內容開始 (這部分是您的報修表單)
     html_content = """
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -91,7 +87,6 @@ def home():
     <title>設備報修系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 使用 Inter 字體以確保跨平台一致性 */
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f4f7f9;
@@ -155,8 +150,8 @@ def home():
         </div>
 
     <script>
-        // 設定您的 Render API 網址，這是最關鍵的連接點
-        const API_URL_BASE = "https://registration-system-ru2g.onrender.com"; // 請替換為您的 Render 網址
+        // 設定您的 API 網址，這在 Render 部署時會自動指向正確的主機
+        const API_URL_BASE = window.location.origin; 
         const API_URL = API_URL_BASE + "/submit_report";
 
         const form = document.getElementById('repairForm');
@@ -189,7 +184,7 @@ def home():
             submitButton.classList.add('opacity-50', 'cursor-not-allowed');
 
             try {
-                // 1. 從表單中收集資料，包含新的 helperTeacher 欄位
+                // 1. 從表單中收集資料
                 const reportData = {
                     "reporterName": document.getElementById('reporter_name_input').value,
                     "deviceLocation": document.getElementById('location_input').value,
@@ -235,15 +230,15 @@ def home():
 </body>
 </html>
     """
+    # HTML 內容結束
     return Response(html_content, mimetype='text/html')
 
 
-# 2. API 路由：用於接收表單提交的資料 (已加入 helperTeacher 欄位)
+# 2. API 路由：用於接收表單提交的資料 (寫入 A-F 列)
 @app.route('/submit_report', methods=['POST'])
 def submit_data_api():
     """
     接收來自網頁的 POST 請求，將 JSON 資料寫入 Google Sheets。
-    新版包含 helperTeacher 欄位。
     """
     if not sheet:
         return jsonify({"status": "error", "message": "伺服器初始化失敗，無法連線至 Google Sheets。請檢查 log 訊息。"}), 500
@@ -253,26 +248,20 @@ def submit_data_api():
     except Exception:
         logging.error("請求資料解析失敗：不是有效的 JSON 格式。")
         return jsonify({"status": "error", "message": "請求必須是 JSON 格式。請檢查網頁前端的 Content-Type。"}), 400
-
-    if not data:
-        logging.error("請求資料為空。")
-        return jsonify({"status": "error", "message": "請求資料為空。"}), 400
     
     try:
         # 從 JSON 資料中提取欄位
         reporterName = data.get('reporterName', 'N/A')
         deviceLocation = data.get('deviceLocation', 'N/A')
         problemDescription = data.get('problemDescription', 'N/A')
-        # *** 新增協辦老師欄位 ***
-        helperTeacher = data.get('helperTeacher', '無指定')
+        helperTeacher = data.get('helperTeacher', '無指定') # E 列欄位
 
         if not all([reporterName != 'N/A', deviceLocation != 'N/A', problemDescription != 'N/A']):
             logging.error(f"缺少必要資料: {data}")
             return jsonify({"status": "error", "message": "缺少必要的報修資料（如報修人、地點或描述）。"}), 400
 
-        # 獲取當前的 UTC 時間
+        # 獲取台灣時間
         utc_now = datetime.datetime.utcnow()
-        # 加上 8 小時的偏移量 (台灣時區)
         taiwan_time = utc_now + datetime.timedelta(hours=8)
         timestamp = taiwan_time.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -282,8 +271,8 @@ def submit_data_api():
             str(reporterName),
             str(deviceLocation),
             str(problemDescription),
-            str(helperTeacher), # 第 5 個欄位 (E 列)
-            "待處理" # 第 6 個欄位 (F 列)
+            str(helperTeacher), # 協辦老師 (E 列)
+            "待處理" # 狀態 (F 列)
         ]
         
         # 將資料附加到工作表的最後一行
@@ -303,6 +292,7 @@ def student_tasks_page():
     """
     回傳學生任務清單的 HTML 頁面。
     """
+    # HTML 內容開始 (這部分是學生任務清單)
     html_content = f"""
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -330,7 +320,7 @@ def student_tasks_page():
         
         <div class="text-center mb-8">
             <h1 class="text-4xl font-extrabold text-gray-900">學長姐任務清單</h1>
-            <p class="text-gray-500 mt-2">點擊「已完成」按鈕回報進度，請勿擅自更改他人任務！</p>
+            <p class="text-gray-500 mt-2">點擊「回報已完成」按鈕回報進度，請勿擅自更改他人任務！</p>
             <div class="mt-4">
                  <a href="/" class="text-sm font-medium text-indigo-600 hover:text-indigo-500">
                     ← 回到報修表單
@@ -352,12 +342,18 @@ def student_tasks_page():
     </div>
 
     <script>
-        const API_URL_BASE = "{request.url_root.rstrip('/')}"; 
+        // 設定 API 基礎 URL
+        const API_URL_BASE = window.location.origin; 
         const GET_TASKS_URL = API_URL_BASE + "/get_tasks";
         const UPDATE_STATUS_URL = API_URL_BASE + "/update_status";
         const tasksContainer = document.getElementById('tasks-container');
         const loadingMessage = document.getElementById('loading-message');
         const messageBox = document.getElementById('message-box');
+
+        // 輔助函式：將字串中的 HTML 特殊字元轉義，防止 XSS 攻擊
+        function escape(html) {{
+            return html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }}
 
         // 顯示訊息函式
         function showMessage(message, isSuccess) {{
@@ -379,17 +375,14 @@ def student_tasks_page():
         function createTaskCard(task) {{
             // 狀態顏色
             let statusClass = '';
-            let buttonText = '已完成';
+            let buttonText = '回報已完成';
             let isCompleted = false;
 
-            if (task.status === '待處理') {{
+            if (task.status === '待處理' || task.status === '處理中') {{
                 statusClass = 'bg-yellow-100 text-yellow-800';
-            }} else if (task.status === '處理中') {{
-                statusClass = 'bg-blue-100 text-blue-800';
-                buttonText = '確認已完成';
             }} else if (task.status === '已完成') {{
                 statusClass = 'bg-green-100 text-green-800';
-                buttonText = '任務已結案';
+                buttonText = '已結案 (已完成)';
                 isCompleted = true;
             }} else {{
                 statusClass = 'bg-gray-100 text-gray-800';
@@ -438,16 +431,7 @@ def student_tasks_page():
         async function handleStatusUpdate(event) {{
             const button = event.currentTarget;
             const rowIndex = button.dataset.rowIndex;
-            const currentStatus = button.dataset.currentStatus;
-            
-            let newStatus;
-            if (currentStatus === '待處理' || currentStatus === '處理中') {{
-                // 邏輯：從 '待處理' 或 '處理中' 變為 '已完成'
-                newStatus = '已完成';
-            }} else {{
-                // 預防性鎖定
-                return; 
-            }}
+            const newStatus = '已完成'; // 點擊按鈕一律更新為「已完成」
             
             button.disabled = true;
             button.textContent = '正在更新...';
@@ -468,7 +452,7 @@ def student_tasks_page():
                 if (response.ok) {{
                     showMessage(result.message, true);
                     // 成功後重新載入任務列表
-                    loadTasks(); 
+                    await loadTasks(); 
                 }} else {{
                     throw new Error(result.message || '更新失敗');
                 }}
@@ -476,11 +460,7 @@ def student_tasks_page():
             }} catch (error) {{
                 console.error("更新失敗:", error);
                 showMessage(`更新失敗: ${error.message}`, false);
-            }} finally {{
-                // 即使失敗也重新載入，確保狀態正確
-                button.disabled = false;
-                button.textContent = '更新完成'; // 實際應被 loadTasks() 取代
-            }}
+            }} 
         }
 
 
@@ -505,7 +485,7 @@ def student_tasks_page():
                     const sortedTasks = result.tasks.sort((a, b) => {{
                         if (a.status === '已完成' && b.status !== '已完成') return 1;
                         if (a.status !== '已完成' && b.status === '已完成') return -1;
-                        return 0; // 保持其他順序
+                        return 0; 
                     }});
 
                     sortedTasks.forEach(task => {{
@@ -521,7 +501,7 @@ def student_tasks_page():
                 console.error("載入任務失敗:", error);
                 tasksContainer.innerHTML = `<p class="text-center text-red-600 p-8">載入任務失敗：${error.message}</p>`;
             }}
-        }
+        }}
 
         // 頁面載入時執行
         window.onload = loadTasks;
@@ -529,6 +509,7 @@ def student_tasks_page():
 </body>
 </html>
     """
+    # HTML 內容結束
     return Response(html_content, mimetype='text/html')
 
 # 4. API 路由：用於讀取 Google Sheets 所有報修資料
@@ -542,14 +523,12 @@ def get_tasks_api():
 
     try:
         # 讀取工作表中的所有資料
-        # gspread.get_all_values() 讀取所有儲存格的字串值
         all_data = sheet.get_all_values()
         
         # 假設第一行為標題，跳過
         if len(all_data) <= 1:
             return jsonify({"status": "success", "tasks": []})
 
-        headers = all_data[0]
         records = all_data[1:]
         
         tasks_list = []
@@ -581,7 +560,7 @@ def get_tasks_api():
 @app.route('/update_status', methods=['POST'])
 def update_status_api():
     """
-    接收 POST 請求，根據列號 (rowIndex) 更新報修記錄的狀態。
+    接收 POST 請求，根據列號 (rowIndex) 更新報修記錄的狀態 (F 列)。
     """
     if not sheet:
         return jsonify({"status": "error", "message": "伺服器初始化失敗，無法連線至 Google Sheets。"}), 500
@@ -591,12 +570,11 @@ def update_status_api():
         rowIndex = int(data.get('rowIndex'))
         newStatus = data.get('newStatus')
         
-        if not rowIndex or not newStatus or rowIndex < 2: # 報修記錄從第 2 列開始
+        if not rowIndex or not newStatus or rowIndex < 2:
             return jsonify({"status": "error", "message": "無效的請求資料：缺少列號或新狀態。"}), 400
 
-        # 我們需要更新的是「狀態」欄位，根據前面假設是 F 列 (索引 5, 從 1 開始數是 6)
-        # gspread 的 update_cell(row, col, value) col 是從 1 開始數
-        STATUS_COLUMN_INDEX = 6 # F 列
+        # 「狀態」欄位對應 Sheets 的 F 列，在 gspread 中列號 (col) 從 1 開始數，所以 F 列是 6
+        STATUS_COLUMN_INDEX = 6 
 
         sheet.update_cell(rowIndex, STATUS_COLUMN_INDEX, newStatus)
         
@@ -610,5 +588,5 @@ def update_status_api():
 # ----------------------------------------------------
 # 本地測試運行
 if __name__ == '__main__':
-    # 注意：在 Render 上運行時，startCommand 應使用 gunicorn/uvicorn (如 render.yaml)
+    # 注意：在 Render 上運行時，請使用 uvicorn (如 render.yaml)
     app.run(debug=True, host='0.0.0.0', port=os.environ.get('PORT', 5000))
