@@ -3,5 +3,6 @@ services:
     name: 設備報修表單
     env: python
     buildCommand: "pip install -r requirements.txt"
+    # *** 關鍵修改：從 gunicorn 改為 uvicorn ***
     startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
     autoDeploy: false
