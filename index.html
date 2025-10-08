@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>設備報修系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 使用 Inter 字體以確保跨平台一致性 */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7f9;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div class="w-full max-w-lg bg-white p-8 md:p-10 rounded-xl shadow-2xl">
+        
+        <div class="text-center mb-8">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-indigo-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <h1 class="text-3xl font-bold text-gray-900">設備報修單</h1>
+            <p class="text-gray-500 mt-1">請填寫詳細資訊，以便我們快速處理。</p>
+        </div>
+
+        <div id="message-box" class="hidden mb-6 p-3 text-center rounded-lg font-medium transition-all duration-300"></div>
+
+        <form id="repairForm" class="space-y-6">
+            
+            <div>
+                <label for="reporter_name_input" class="block text-sm font-medium text-gray-700 mb-1">報修人姓名 (必填)</label>
+                <input type="text" id="reporter_name_input" required class="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+
+            <div>
+                <label for="location_input" class="block text-sm font-medium text-gray-700 mb-1">設備位置 / 教室名稱 (必填)</label>
+                <input type="text" id="location_input" required class="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+
+            <div>
+                <label for="problem_input" class="block text-sm font-medium text-gray-700 mb-1">問題詳細描述 (必填)</label>
+                <textarea id="problem_input" rows="4" required class="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 resize-none"></textarea>
+            </div>
+            
+            <div>
+                <label for="teacher_select" class="block text-sm font-medium text-gray-700 mb-1">協辦老師 (選填)</label>
+                <select id="teacher_select" class="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white">
+                    <option value="無指定">-- 選擇協辦老師 (無指定) --</option>
+                    <option value="詹老師">詹老師</option>
+                    <option value="佘老師">佘老師</option>
+                    <option value="陳老師">陳老師</option>
+                </select>
+            </div>
+
+            <div>
+                <button type="submit" id="submit-button" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
+                    送出報修單
+                </button>
+            </div>
+            
+            <div class="text-center pt-4 border-t border-gray-100 mt-6">
+                <a href="/tasks" class="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                    前往學生報修任務清單 →
+                </a>
+            </div>
+        </form>
+        </div>
+
+    <script>
+        // 設定您的 API 網址，這是最關鍵的連接點
+        // 當部署到 Render 後，window.location.origin 會自動指向您的網站根目錄
+        const API_URL_BASE = window.location.origin; 
+        const API_URL = API_URL_BASE + "/submit_report";
+
+        const form = document.getElementById('repairForm');
+        const submitButton = document.getElementById('submit-button');
+        const messageBox = document.getElementById('message-box');
+
+        // 顯示訊息函式（取代 alert）
+        function showMessage(message, isSuccess) {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-800', 'bg-green-100', 'text-green-800');
+            
+            if (isSuccess) {
+                messageBox.classList.add('bg-green-100', 'text-green-800');
+            } else {
+                messageBox.classList.add('bg-red-100', 'text-red-800');
+            }
+            // 5 秒後隱藏訊息
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 5000);
+        }
+
+        form.addEventListener('submit', async function(event) {
+            // 阻止表單的預設提交行為
+            event.preventDefault();
+
+            // 鎖定按鈕並顯示載入狀態
+            submitButton.disabled = true;
+            submitButton.textContent = '正在送出...';
+            submitButton.classList.add('opacity-50', 'cursor-not-allowed');
+
+            try {
+                // 1. 從表單中收集資料
+                const reportData = {
+                    "reporterName": document.getElementById('reporter_name_input').value,
+                    "deviceLocation": document.getElementById('location_input').value,
+                    "problemDescription": document.getElementById('problem_input').value,
+                    "helperTeacher": document.getElementById('teacher_select').value // 包含協辦老師
+                };
+
+                // 2. 發送 POST 請求到後端 API
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json' 
+                    },
+                    body: JSON.stringify(reportData) // 將 JavaScript 物件轉換為 JSON 字串
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    // HTTP 狀態碼為 200-299，表示成功
+                    showMessage(result.message, true);
+                    // 清空表單
+                    form.reset(); 
+                } else {
+                    // HTTP 狀態碼為 4xx 或 5xx
+                    throw new Error(result.message || `API 錯誤：HTTP 狀態碼 ${response.status}`);
+                }
+
+            } catch (error) {
+                // 處理網路錯誤或 API 返回的錯誤訊息
+                console.error("提交失敗:", error);
+                // 顯示錯誤訊息
+                showMessage(`提交失敗: ${error.message}`, false);
+            } finally {
+                // 無論成功或失敗，都恢復按鈕狀態
+                submitButton.disabled = false;
+                submitButton.textContent = '送出報修單';
+                submitButton.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        });
+    </script>
+</body>
+</html>
